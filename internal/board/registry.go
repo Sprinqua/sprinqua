@@ -28,10 +28,14 @@ type Board struct {
 	Pins        []Channel // GPIO boards only
 
 	// I2C boards only (Kind == KindI2C). I2CNewDriver is board-specific —
-	// different I2C boards can use completely different wire protocols (and
-	// their own default address, not user-configurable), so each one
-	// provides its own constructor (see driver_*.go) instead of the Engine
-	// assuming a single shared implementation.
+	// different I2C boards can use completely different wire protocols and
+	// addressing schemes (not user-configurable beyond switches on the
+	// board itself), so each one provides its own constructor (see
+	// driver_*.go) instead of the Engine assuming a single shared
+	// implementation. Stackable boards also implement StackedRelayDriver,
+	// which exposes their own address space for the setup wizard's I2C scan
+	// — there's no shared base-address/channels-per-board convention here
+	// because that knowledge belongs to each board, not the registry.
 	I2CBus       uint32
 	I2CNewDriver func(bus *client.I2CBus) RelayDriver
 }
@@ -142,12 +146,27 @@ var All = []*Board{
 		// can no longer find their board on the next boot).
 		ID:           "52pi-ep-0099-i2c",
 		Name:         "52Pi EP-0099 4/8/12/16-Channel",
-		Description:  "4-channel I2C relay board, stackable up to 4 boards (16 channels). If you have fewer than 4 stacked, disable the extra zones in Configure zones.",
+		Description:  "4-channel I2C relay board, stackable up to 4 boards (max. 16 channels).",
 		SKU:          "EP-0099",
 		Channels:     16,
 		Kind:         KindI2C,
 		I2CBus:       1,
 		I2CNewDriver: NewEP0099Driver,
+	},
+	{
+		// Up to 8 boards can be stacked on the same bus via the A0-A2
+		// address switches (0x20-0x27) for up to 32 channels total — see
+		// driver_seeed_relay_v1.go for the channel→address mapping.
+		// Registered with the max channel count; users with fewer boards
+		// disable the extra zones in Settings after setup.
+		ID:           "seeed-relay-v1-i2c",
+		Name:         "Seeed Studio 4-Channel SPDT 4/8/../32-Channel",
+		Description:  "4-channel SPDT relay board for Raspberry Pi via I2C, stackable up to 8 boards (max. 32 channels).",
+		SKU:          "103030029",
+		Channels:     32,
+		Kind:         KindI2C,
+		I2CBus:       1,
+		I2CNewDriver: NewSeeedRelayDriver,
 	},
 	{
 		ID:          "waveshare-pi0-6ch",

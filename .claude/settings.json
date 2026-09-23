@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(gofmt -l internal/board/)",
+      "Bash(gofmt -w internal/board/driver_ep0099.go internal/board/driver_seeed_relay_v1.go)",
+      "Bash(gofmt -w internal/board/*.go)",
+      "Bash(gh api *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)"
+    ]
+  }
+}

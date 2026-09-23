@@ -586,7 +586,6 @@
       </form>
     </div>
 
-    {{if .SetupDone}}
     <!-- Zones -->
     <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">{{.S.settings_zones_title}}</h2>
     <div class="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 mb-6">
@@ -659,7 +658,6 @@
         </button>
       </form>
     </div>
-    {{end}}
 
     <!-- Backup & Restore -->
     <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">{{.S.backup_title}}</h2>
@@ -706,7 +704,6 @@
     <!-- Hardware -->
     <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">{{.S.settings_hw_title}}</h2>
     <div class="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6">
-      {{if .SetupDone}}
       <div class="flex items-center gap-3 mb-4">
         <div class="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
           <span class="text-lg">🔌</span>
@@ -716,9 +713,6 @@
           <p class="text-xs text-slate-400">{{.ZoneCount}} {{.S.settings_hw_zones}}</p>
         </div>
       </div>
-      {{else}}
-      <p class="text-sm text-slate-500 mb-4">{{.S.settings_hw_not_done}}</p>
-      {{end}}
       <p class="text-xs text-slate-400 mb-3">{{.S.settings_reset_desc}}</p>
       <form method="POST" action="/setup/reset"
         onsubmit="return confirm('{{.S.settings_reset_confirm}}')">

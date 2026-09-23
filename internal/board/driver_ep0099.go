@@ -1,6 +1,12 @@
 package board
 
-import "github.com/OrbitOS-org/sdk-go/v26/client"
+import (
+	"fmt"
+	"sort"
+
+	"github.com/OrbitOS-org/sdk-go/v26/client"
+	"github.com/OrbitOS-org/sdk-go/v26/logger"
+)
 
 // I2C relay command bytes for the 52Pi EP-0099, confirmed against:
 //
@@ -17,42 +23,71 @@ const (
 	ep0099RelayOff byte = 0x00
 )
 
-// ep0099BaseAddr is the EP-0099's default I2C address — not user-configurable
-// anywhere in Sprinqua, so it lives here rather than in the board registry.
-const ep0099BaseAddr uint32 = 0x10
+// Each EP-0099 is jumpered to one of 4 addresses (0x10-0x13), normally to
+// stack up to ep0099MaxStack boards on one bus. A lone board doesn't have
+// to be jumpered to ep0099BaseAddr specifically — see NewEP0099Driver.
+const (
+	ep0099BaseAddr         uint32 = 0x10
+	ep0099MaxStack                = 4
+	ep0099ChannelsPerBoard        = 4
+)
 
-// ep0099ChannelsPerBoard is fixed by the hardware: up to 4 EP-0099 boards can
-// be stacked on the same bus at consecutive addresses (0x10, 0x11, 0x12,
-// 0x13), each exposing 4 relays. Channels 1-4 map to the first board, 5-8 to
-// the second, and so on.
-const ep0099ChannelsPerBoard = 4
-
-// ep0099Driver is a RelayDriver bound to a stack of EP-0099s starting at
-// ep0099BaseAddr.
+// ep0099Driver is a RelayDriver bound to whichever EP-0099s actually
+// responded on the bus when it was opened. It also implements
+// StackedRelayDriver so the setup wizard's I2C scan can report what it
+// found.
 type ep0099Driver struct {
-	bus *client.I2CBus
+	bus   *client.I2CBus
+	addrs []uint32 // discovered board addresses, ascending; addrs[slot] is that board's address
 }
 
-// NewEP0099Driver builds the RelayDriver for one or more stacked EP-0099s.
+// NewEP0099Driver scans the bus for EP-0099s and builds a RelayDriver bound
+// to whichever of the 4 valid addresses (0x10-0x13) actually responded,
+// ordered ascending — so a lone board jumpered to any of those addresses is
+// found and controlled correctly, not just one jumpered to the default
+// 0x10. If the scan itself fails (e.g. unsupported on this bus), falls back
+// to assuming a single board at the default address, matching this
+// driver's behavior before stack scanning existed — but a successful scan
+// that finds nothing is trusted as-is (no boards discovered), since that's
+// a real answer, not a missing one.
 func NewEP0099Driver(bus *client.I2CBus) RelayDriver {
-	return &ep0099Driver{bus: bus}
+	found, err := bus.Scan()
+	if err != nil {
+		logger.Warnf(logTag, "EP-0099 I2C scan failed, assuming single board at 0x%02X: %v", ep0099BaseAddr, err)
+		return &ep0099Driver{bus: bus, addrs: []uint32{ep0099BaseAddr}}
+	}
+	addrs := ep0099ValidAddrs(found)
+	logger.Infof(logTag, "EP-0099 I2C scan found addresses: %s — using: %s", formatI2CAddrs(found), formatI2CAddrs(addrs))
+	return &ep0099Driver{bus: bus, addrs: addrs}
+}
+
+// ep0099ValidAddrs filters addrs to the EP-0099's valid range (0x10-0x13)
+// and returns them sorted ascending.
+func ep0099ValidAddrs(addrs []uint32) []uint32 {
+	var valid []uint32
+	for _, a := range addrs {
+		if a >= ep0099BaseAddr && a < ep0099BaseAddr+ep0099MaxStack {
+			valid = append(valid, a)
+		}
+	}
+	sort.Slice(valid, func(i, j int) bool { return valid[i] < valid[j] })
+	return valid
 }
 
 func (d *ep0099Driver) SetChannel(channel int, on bool) error {
-	addr, register := ep0099Target(channel)
+	slot := (channel - 1) / ep0099ChannelsPerBoard
+	if slot >= len(d.addrs) {
+		return fmt.Errorf("channel %d: no EP-0099 discovered at stack slot %d", channel, slot)
+	}
+	localChannel := byte((channel-1)%ep0099ChannelsPerBoard + 1)
 	val := ep0099RelayOff
 	if on {
 		val = ep0099RelayOn
 	}
-	_, err := d.bus.Transfer(addr, []byte{register, val}, 0, 0)
+	_, err := d.bus.Transfer(d.addrs[slot], []byte{localChannel, val}, 0, 0)
 	return err
 }
 
-// ep0099Target maps a 1-based channel number to the I2C address of the
-// specific board in the stack that owns it, and that board's own register
-// for the channel (always 1-4, regardless of stack position).
-func ep0099Target(channel int) (addr uint32, register byte) {
-	boardOffset := (channel - 1) / ep0099ChannelsPerBoard
-	localChannel := (channel-1)%ep0099ChannelsPerBoard + 1
-	return ep0099BaseAddr + uint32(boardOffset), byte(localChannel)
+func (d *ep0099Driver) Discovered() (boards, channels int) {
+	return len(d.addrs), len(d.addrs) * ep0099ChannelsPerBoard
 }

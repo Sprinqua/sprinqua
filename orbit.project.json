@@ -3,8 +3,10 @@
   "appPath": "cmd/sprinqua",
   "certsDir": "cmd/certs/grpc",
   "packagesDir": ".orbit",
-  "sdkDevPackageNaming": true,
   "sdkVersion": "v26.0.1",
   "orbitsignerPath": "",
-  "name": "sprinqua"
+  "name": "sprinqua",
+  "targetArch": [
+    "armv6"
+  ]
 }

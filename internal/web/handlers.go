@@ -99,7 +99,6 @@ type settingsData struct {
 	MQTTConnected  bool
 	SmartWatering  config.SmartWateringConfig
 	EToCalculating bool
-	SetupDone      bool
 	BoardName      string
 	ZoneCount      int
 	Zones          []config.Zone
@@ -118,6 +117,10 @@ var langLabels = map[string]string{
 
 // handleSetup renders the Settings page (always the entry point for the Setup tab).
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	if !s.cfg.SetupDone {
+		http.Redirect(w, r, "/setup/wizard", http.StatusFound)
+		return
+	}
 	tf := s.cfg.TimeFormat
 	if tf == "" {
 		tf = "24h"
@@ -147,7 +150,6 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		MQTTConnected:  s.mqttClient.IsConnected(),
 		SmartWatering:  sw,
 		EToCalculating: etoCalc,
-		SetupDone:      s.cfg.SetupDone,
 		BoardName:      boardName,
 		ZoneCount:      len(s.cfg.Zones),
 		Zones:          s.cfg.Zones,
@@ -414,12 +416,48 @@ func (s *Server) handleSetupChannels(w http.ResponseWriter, r *http.Request) {
 	if b.SKU != "" {
 		fmt.Fprintf(w, `<p class="text-[11px] font-mono text-slate-400 w-full mb-1">SKU: %s</p>`, b.SKU)
 	}
+	previewChannels := b.Channels
+	if b.Kind == board.KindI2C {
+		channels, boards, err := s.chMgr.DetectStackedChannels(b)
+		previewChannels = channels
+		switch {
+		case err != nil:
+			logger.Warnf(logTag, "i2c scan board %q: %v", b.ID, err)
+			fmt.Fprintf(w, `<p class="text-xs text-red-500 w-full">%s</p>`, strs["setup_i2c_scan_failed"])
+		case channels == 0:
+			fmt.Fprintf(w, `<p class="text-xs text-amber-500 w-full">%s</p>`, strs["setup_i2c_scan_none"])
+		default:
+			fmt.Fprintf(w, `<input type="hidden" name="detected_channels" value="%d">`, channels)
+			fmt.Fprintf(w, `<p class="text-xs text-emerald-600 w-full">%s</p>`,
+				fmt.Sprintf(strs["setup_i2c_scan_found"], boards, channels))
+		}
+	}
+	s.renderContinueButton(w, strs, previewChannels > 0)
+	if previewChannels == 0 {
+		return
+	}
 	fmt.Fprintf(w, `<span class="text-xs text-slate-400">%s</span>`, strs["step1_channels_label"])
-	for ch := 1; ch <= b.Channels; ch++ {
+	for ch := 1; ch <= previewChannels; ch++ {
 		color := zoneColors[(ch-1)%len(zoneColors)]
 		fmt.Fprintf(w, ` <span class="text-xs font-semibold text-white px-2.5 py-1 rounded-full" style="background-color: %s">CH%d</span>`,
 			color, ch)
 	}
+}
+
+// renderContinueButton emits an out-of-band swap of the step 1 submit
+// button so it lives outside #channel-badges (htmx finds it by id
+// regardless of where it appears in this fragment). Used to disable
+// continuing when an I2C board is selected but no boards were detected —
+// otherwise the wizard would silently fall back to the registered maximum
+// and the user wouldn't notice until testing relays in step 3.
+func (s *Server) renderContinueButton(w http.ResponseWriter, strs map[string]string, enabled bool) {
+	disabledAttr := ""
+	if !enabled {
+		disabledAttr = " disabled"
+	}
+	fmt.Fprintf(w, `<button type="submit" id="step1-continue-btn" hx-swap-oob="true"
+		class="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold py-3 px-4 rounded-xl transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"%s>%s</button>`,
+		disabledAttr, strs["btn_continue"])
 }
 
 func (s *Server) handleSetupStep1(w http.ResponseWriter, r *http.Request) {
@@ -429,9 +467,18 @@ func (s *Server) handleSetupStep1(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid board", http.StatusBadRequest)
 		return
 	}
+	channels := b.Channels
+	if b.Kind == board.KindI2C {
+		detected, err := strconv.Atoi(r.FormValue("detected_channels"))
+		if err != nil || detected <= 0 || detected > b.Channels {
+			http.Error(w, "no I2C boards detected — check wiring and address, then go back and retry", http.StatusBadRequest)
+			return
+		}
+		channels = detected
+	}
 	s.cfg.Board = boardID
 
-	zones := make([]config.Zone, b.Channels)
+	zones := make([]config.Zone, channels)
 	for i := range zones {
 		zones[i] = config.Zone{
 			ID:        i + 1,
