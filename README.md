@@ -116,6 +116,14 @@ Contributions are welcome: add your relay board, translate the UI to a new langu
 - Questions, ideas and board requests: [Discussions](https://github.com/orgs/Sprinqua/discussions)
 - Bugs: [Issues](https://github.com/Sprinqua/sprinqua/issues)
 
+## We're looking for developers
+
+Sprinqua is growing and we want more people building it with us. If you'd like to contribute regularly and become part of the team, we'd love to hear from you.
+
+Useful experience: Go, web interfaces (HTML, HTMX), MQTT and Home Assistant, or hands-on work with Raspberry Pi and relay hardware. You don't need all of it; knowing irrigation or gardening well counts too.
+
+**How to reach us:** start a thread in [Discussions](https://github.com/orgs/Sprinqua/discussions) or use the [contact form](https://www.sprinqua.com/?ref=github#contact) on the website. Tell us what you'd like to work on.
+
 ## Links
 
 [Website](https://www.sprinqua.com/?ref=github) · [Install guide](https://www.sprinqua.com/install.html?ref=github) · [Orbit OS Store](https://store.orbit-os.org/app/sprinqua?ref=github-sprinqua) · [Orbit OS](https://www.orbit-os.org/?ref=github-sprinqua) · [Demo video](https://www.youtube.com/watch?v=Phg4g1hm4A0)
